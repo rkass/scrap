@@ -1,4 +1,5 @@
 import random
+import bisect
 
 def calculate_interest(starting_amount, annual_contribution,
                        annual_interest, yearly_tax, final_tax, capital_gains_tax, years, initial_amount=None):
@@ -93,6 +94,7 @@ def sp_margin_profits_sim(investment, loan, interest_rate, period_in_years, sims
     if period_in_years > 1:
         available_starts = available_starts[:-(period_in_years - 1)]
     profit = 0
+    iteration_balances = []
     for i in range(sims):
         start_year = random.choice(available_starts)
         iteration_balance = -investment
@@ -103,8 +105,13 @@ def sp_margin_profits_sim(investment, loan, interest_rate, period_in_years, sims
         iteration_balance += (investment + loan) * investment_yield_percentage
         iteration_balance -= loan
         profit += iteration_balance
+        bisect.insort(iteration_balances, iteration_balance)
+    print "Average profit: {}".format(profit/sims)
+    for percentile in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]:
+        print '{}th percentile: {}'.format(percentile, iteration_balances[int((percentile/100.)*(len(iteration_balances) -1))])
     return profit / sims
 
 if __name__ == '__main__':
-    print sp_margin_profits_sim(investment=10000, loan=10000, interest_rate=0.0266, period_in_years=1, sims=100000)
-
+    sp_margin_profits_sim(investment=2000, loan=2000, interest_rate=0.0266, period_in_years=5, sims=100000) #76k
+    print "\n"
+    sp_margin_profits_sim(investment=2000, loan=0, interest_rate=0.0266, period_in_years=5, sims=100000)
