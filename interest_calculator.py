@@ -112,6 +112,6 @@ def sp_margin_profits_sim(investment, loan, interest_rate, period_in_years, sims
     return profit / sims
 
 if __name__ == '__main__':
-    sp_margin_profits_sim(investment=2000, loan=2000, interest_rate=0.0266, period_in_years=5, sims=100000) #76k
+    sp_margin_profits_sim(investment=2000, loan=2000, interest_rate=0.0266, period_in_years=5, sims=100000)
     print "\n"
     sp_margin_profits_sim(investment=2000, loan=0, interest_rate=0.0266, period_in_years=5, sims=100000)
