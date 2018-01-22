@@ -88,30 +88,40 @@ def margin_profits(price_per_share, shares_purchased, shares_borrowed,
     return balance
 
 
-def sp_margin_profits_sim(investment, loan, interest_rate, period_in_years, sims):
+def sp_margin_profits_sim(investment, loan, interest_rate, period_in_years, sims, yearly_investment, yearly_loan):
     sorted_keys = sorted(k for k in sp_data.keys())
     available_starts = sorted_keys
     if period_in_years > 1:
         available_starts = available_starts[:-(period_in_years - 1)]
     profit = 0
-    iteration_balances = []
+    iteration_profits = []
+    invested_per_iteration = 0
     for i in range(sims):
         start_year = random.choice(available_starts)
-        iteration_balance = -investment
-        investment_yield_percentage = 1
+        iteration_invested = investment
+        balance_including_loan = investment + loan
+        owed = loan
         for year in [start_year + i for i in range(period_in_years)]:
-            iteration_balance -= loan * interest_rate
-            investment_yield_percentage = investment_yield_percentage * (1 + sp_data[year])
-        iteration_balance += (investment + loan) * investment_yield_percentage
-        iteration_balance -= loan
-        profit += iteration_balance
-        bisect.insort(iteration_balances, iteration_balance)
+            owed = owed * (1 + interest_rate)
+            balance_including_loan = balance_including_loan * (1 + sp_data[year])
+            owed += yearly_loan
+            iteration_invested += yearly_investment
+            balance_including_loan += yearly_investment + yearly_loan
+        gross = balance_including_loan - owed
+        iteration_profit = gross - iteration_invested
+        profit += iteration_profit
+        bisect.insort(iteration_profits, iteration_profit)
+        if invested_per_iteration == 0:
+            invested_per_iteration = iteration_invested
+        else:
+            assert iteration_invested == invested_per_iteration
     print "Average profit: {}".format(profit/sims)
+    print "Invesred: {}".format(iteration_invested)
     for percentile in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]:
-        print '{}th percentile: {}'.format(percentile, iteration_balances[int((percentile/100.)*(len(iteration_balances) -1))])
+        print '{}th percentile: {}'.format(percentile, iteration_profits[int((percentile/100.)*(len(iteration_profits) -1))])
     return profit / sims
 
 if __name__ == '__main__':
-    sp_margin_profits_sim(investment=2000, loan=2000, interest_rate=0.0266, period_in_years=5, sims=100000)
+    sp_margin_profits_sim(investment=50000, loan=40000, interest_rate=0.0266, period_in_years=14, sims=100000, yearly_investment=24000, yearly_loan=20000)
     print "\n"
-    sp_margin_profits_sim(investment=2000, loan=0, interest_rate=0.0266, period_in_years=5, sims=100000)
+    sp_margin_profits_sim(investment=50000, loan=0, interest_rate=0.0266, period_in_years=14, sims=100000, yearly_investment=24000, yearly_loan=0)
