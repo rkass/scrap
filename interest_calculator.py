@@ -1,5 +1,6 @@
 import random
 import bisect
+import csv
 
 def calculate_interest(starting_amount, annual_contribution,
                        annual_interest, yearly_tax, final_tax, capital_gains_tax, years, initial_amount=None):
@@ -71,7 +72,6 @@ sp_data = {1928: 0.43810000000000004, 1929: -0.083, 1930: -0.25120000000000003, 
            2013: 0.3215, 2014: 0.1352, 2015: 0.013600000000000001}
 
 
-
 def margin_profits(price_per_share, shares_purchased, shares_borrowed,
                    margin_interest_rate, period_in_days, share_growth_rate=None, price_per_share_end_value=None):
     balance = 0
@@ -88,25 +88,41 @@ def margin_profits(price_per_share, shares_purchased, shares_borrowed,
     return balance
 
 
-def sp_margin_profits_sim(investment, loan, interest_rate, period_in_years, sims, yearly_investment, yearly_loan):
-    sorted_keys = sorted(k for k in sp_data.keys())
-    available_starts = sorted_keys
-    if period_in_years > 1:
-        available_starts = available_starts[:-(period_in_years - 1)]
+def _get_amount_owed(cash, margin):
+    return max(cash * margin - cash, 0)
+
+
+def sp_margin_profits_sim(
+        initial_cash,
+        initial_margin,
+        max_margin,
+        yearly_interest_rate,
+        period_in_months,
+        sims,
+        monthly_cash,
+        monthly_margin,
+        adjust_for_inflation
+):
+    ordered_date_price_tuples = load_monthly_sp(adjust_for_inflation)
+    monthly_interest_rate = yearly_interest_rate / 12.0
+    monthly_loan = _get_amount_owed(monthly_cash, monthly_margin)
+    available_starts = ordered_date_price_tuples
+    if period_in_months > 1:
+        available_starts = available_starts[:-(period_in_months - 1)]
     profit = 0
     iteration_profits = []
     invested_per_iteration = 0
     for i in range(sims):
-        start_year = random.choice(available_starts)
-        iteration_invested = investment
-        balance_including_loan = investment + loan
-        owed = loan
-        for year in [start_year + i for i in range(period_in_years)]:
-            owed = owed * (1 + interest_rate)
-            balance_including_loan = balance_including_loan * (1 + sp_data[year])
-            owed += yearly_loan
-            iteration_invested += yearly_investment
-            balance_including_loan += yearly_investment + yearly_loan
+        start_month = random.randint(0, len(available_starts))
+        iteration_invested = initial_cash
+        balance_including_loan = initial_cash * initial_margin
+        owed = _get_amount_owed(initial_cash, initial_margin)
+        for month in [start_month + i for i in range(period_in_months)]:
+            owed = owed * (1 + monthly_interest_rate)
+            balance_including_loan = balance_including_loan * (1 + float(ordered_date_price_tuples[month][1].replace(',', '')))
+            owed += monthly_loan
+            iteration_invested += monthly_cash
+            balance_including_loan += monthly_cash + monthly_loan
         gross = balance_including_loan - owed
         iteration_profit = gross - iteration_invested
         profit += iteration_profit
@@ -116,12 +132,31 @@ def sp_margin_profits_sim(investment, loan, interest_rate, period_in_years, sims
         else:
             assert iteration_invested == invested_per_iteration
     print "Average profit: {}".format(profit/sims)
-    print "Invesred: {}".format(iteration_invested)
+    print "Invested: {}".format(iteration_invested)
     for percentile in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]:
         print '{}th percentile: {}'.format(percentile, iteration_profits[int((percentile/100.)*(len(iteration_profits) -1))])
     return profit / sims
 
+
+def load_monthly_sp(adjust_for_inflation):
+    filename = 'monthly_sp_inflation_adjusted.csv' if adjust_for_inflation else 'monthly_sp.csv'
+    with open(filename) as csv_file:
+        data = list(csv.reader(csv_file, delimiter='\t'))
+    return data[-1:0:-1]
+
+
 if __name__ == '__main__':
-    sp_margin_profits_sim(investment=50000, loan=40000, interest_rate=0.0266, period_in_years=14, sims=100000, yearly_investment=24000, yearly_loan=20000)
-    print "\n"
-    sp_margin_profits_sim(investment=50000, loan=0, interest_rate=0.0266, period_in_years=14, sims=100000, yearly_investment=24000, yearly_loan=0)
+    x = load_monthly_sp(False)
+    sp_margin_profits_sim(
+        initial_cash=100000,
+        initial_margin=1.5,
+        max_margin=2.0,
+        yearly_interest_rate=0.0266,
+        period_in_months=100,
+        sims=100,
+        monthly_cash=2000,
+        monthly_margin=1.5,
+        adjust_for_inflation=False
+    )
+    # print "\n"
+    # sp_margin_profits_sim(investment=50000, loan=0, interest_rate=0.0266, period_in_years=14, sims=100000, yearly_investment=24000, yearly_loan=0)
