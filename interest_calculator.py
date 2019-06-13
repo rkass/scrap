@@ -106,20 +106,20 @@ def sp_margin_profits_sim(
     ordered_date_price_tuples = load_monthly_sp(adjust_for_inflation)
     monthly_interest_rate = yearly_interest_rate / 12.0
     monthly_loan = _get_amount_owed(monthly_cash, monthly_margin)
-    available_starts = ordered_date_price_tuples
-    if period_in_months > 1:
-        available_starts = available_starts[:-(period_in_months - 1)]
+    available_starts = ordered_date_price_tuples[:-period_in_months]
     profit = 0
     iteration_profits = []
     invested_per_iteration = 0
     for i in range(sims):
-        start_month = random.randint(0, len(available_starts))
+        start_month = random.randint(1, len(available_starts))
         iteration_invested = initial_cash
         balance_including_loan = initial_cash * initial_margin
         owed = _get_amount_owed(initial_cash, initial_margin)
         for month in [start_month + i for i in range(period_in_months)]:
-            owed = owed * (1 + monthly_interest_rate)
-            balance_including_loan = balance_including_loan * (1 + float(ordered_date_price_tuples[month][1].replace(',', '')))
+            owed *= (1 + monthly_interest_rate)
+            this_months_price = float(ordered_date_price_tuples[month][1].replace(',', ''))
+            last_months_price = float(ordered_date_price_tuples[month - 1][1].replace(',', ''))
+            balance_including_loan *= this_months_price / last_months_price
             owed += monthly_loan
             iteration_invested += monthly_cash
             balance_including_loan += monthly_cash + monthly_loan
@@ -148,14 +148,14 @@ def load_monthly_sp(adjust_for_inflation):
 if __name__ == '__main__':
     x = load_monthly_sp(False)
     sp_margin_profits_sim(
-        initial_cash=100000,
-        initial_margin=1.5,
+        initial_cash=100,
+        initial_margin=1.,
         max_margin=2.0,
         yearly_interest_rate=0.0266,
-        period_in_months=100,
-        sims=100,
-        monthly_cash=2000,
-        monthly_margin=1.5,
+        period_in_months=1,
+        sims=1000,
+        monthly_cash=1,
+        monthly_margin=1.,
         adjust_for_inflation=False
     )
     # print "\n"
