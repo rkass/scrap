@@ -1,6 +1,12 @@
 import random
-import bisect
+import calendar
 import csv
+import calendar
+import sim_intervals
+import datetime
+import calc_taxes
+import numpy
+
 
 def calculate_interest(starting_amount, annual_contribution,
                        annual_interest, yearly_tax, final_tax, capital_gains_tax, years, initial_amount=None):
@@ -92,50 +98,171 @@ def _get_amount_owed(cash, margin):
     return max(cash * margin - cash, 0)
 
 
-def sp_margin_profits_sim(
-        initial_cash,
-        initial_margin,
-        max_margin,
-        yearly_interest_rate,
-        period_in_months,
-        sims,
-        monthly_cash,
-        monthly_margin,
-        adjust_for_inflation
-):
-    ordered_date_price_tuples = load_monthly_sp(adjust_for_inflation)
-    monthly_interest_rate = yearly_interest_rate / 12.0
-    monthly_loan = _get_amount_owed(monthly_cash, monthly_margin)
-    available_starts = ordered_date_price_tuples[:-period_in_months]
-    profit = 0
-    iteration_profits = []
-    invested_per_iteration = 0
-    for i in range(sims):
-        start_month = random.randint(1, len(available_starts))
-        iteration_invested = initial_cash
-        balance_including_loan = initial_cash * initial_margin
-        owed = _get_amount_owed(initial_cash, initial_margin)
-        for month in [start_month + i for i in range(period_in_months)]:
-            owed *= (1 + monthly_interest_rate)
-            this_months_price = float(ordered_date_price_tuples[month][1].replace(',', ''))
-            last_months_price = float(ordered_date_price_tuples[month - 1][1].replace(',', ''))
-            balance_including_loan *= this_months_price / last_months_price
-            owed += monthly_loan
-            iteration_invested += monthly_cash
-            balance_including_loan += monthly_cash + monthly_loan
-        gross = balance_including_loan - owed
-        iteration_profit = gross - iteration_invested
-        profit += iteration_profit
-        bisect.insort(iteration_profits, iteration_profit)
-        if invested_per_iteration == 0:
-            invested_per_iteration = iteration_invested
+# class InvestmentState(object):
+#
+#     def __init__(self, total_investment, equitive):
+
+def simulate_month(ordered_date_price_tuples, index, percent_change_std):
+    date_string = ordered_date_price_tuples[index][0].strip()
+    month_abbr = date_string.split(' ')[0]
+    month_number = list(calendar.month_abbr).index(month_abbr)
+    year = int(date_string.split(' ')[-1])
+    num_days = calendar.monthrange(year, month_number)[-1]
+    current_price = price_for_index(ordered_date_price_tuples, index)
+    beginning_of_next_month_price = price_for_index(ordered_date_price_tuples, index + 1)
+    return [current_price] + sim_intervals.sim_intervals(current_price, beginning_of_next_month_price, num_days, percent_change_std)[:-1]
+
+
+def price_for_index(ordered_date_price_tuples, index):
+    return float(ordered_date_price_tuples[index][1].replace(',', ''))
+
+"""
+Each day
+    - Deposit money
+    - Buy Positions
+    - Sell Positions Due to Max Margin
+    - Pay Interest
+"""
+
+class InvestmentTrial(object):
+
+    monthly_deposit_day = 14
+    monthly_interest_pay_day = 27
+
+    def __init__(self, seed_cash, initial_margin, annualized_interest_rate, duration_in_months,
+                 monthly_cash, monthly_margin, adjust_for_inflation, max_allowed_margin,
+                 long_term_tax_rate, short_term_tax_rate, fixed_start_index=None):
+        self.ordered_date_price_tuples = load_monthly_sp(adjust_for_inflation)
+        self.daily_interest_rate = annualized_interest_rate / 365.0
+        self.seed_cash = seed_cash
+        self.initial_margin = initial_margin
+        self.duration_in_months = duration_in_months
+        self.monthly_cash = monthly_cash
+        self.monthly_margin = monthly_margin
+        self.start_month_index = fixed_start_index if fixed_start_index \
+            else random.randint(0, len(self.ordered_date_price_tuples) - duration_in_months)
+        self.yesterday_close_price = None
+        self.today_close_price = None
+        self.month_index = None
+        self.day_index = None
+        self.short = 0
+        self.total_shares = 0
+        self.max_allowed_margin = max_allowed_margin
+        self.transaction_history = []
+        self.deposited_money = 0
+        self.daily_percent_change_std = estimate_daily_std(self.ordered_date_price_tuples)
+        self.long_term_tax_rate = long_term_tax_rate
+        self.short_term_tax_rate = short_term_tax_rate
+        print "Beginning {} where price is {}".format(self._date_for_month_day(self.start_month_index, 0),
+                                                      price_for_index(self.ordered_date_price_tuples,
+                                                                      self.start_month_index))
+        print "Ending {} where price is {}".format(self._date_for_month_day(self.start_month_index +
+                                                                            self.duration_in_months, 0),
+                                                   price_for_index(self.ordered_date_price_tuples,
+                                                                   self.start_month_index + self.duration_in_months))
+
+    def long(self):
+        return self.total_shares * self.today_close_price
+
+    def _max_purchase_amount(self):
+        if self.short == self.long():
+            raise Exception('Margin Call')
+        return (self.max_allowed_margin - 1) * self.long() - (self.max_allowed_margin * self.short)
+
+    def _deposit_money(self):
+        if self.month_index == self.start_month_index and self.day_index == 0:
+            deposit_amount = self.seed_cash
+        elif self.month_index > self.start_month_index and self.day_index == self.monthly_deposit_day:
+            deposit_amount = self.monthly_cash
         else:
-            assert iteration_invested == invested_per_iteration
-    print "Average profit: {}".format(profit/sims)
-    print "Invested: {}".format(iteration_invested)
-    for percentile in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]:
-        print '{}th percentile: {}'.format(percentile, iteration_profits[int((percentile/100.)*(len(iteration_profits) -1))])
-    return profit / sims
+            deposit_amount = 0
+        self.short -= deposit_amount
+        self.deposited_money += deposit_amount
+
+    def _todays_date(self):
+        return self._date_for_month_day(self.month_index, self.day_index)
+
+    def _date_for_month_day(self, month_index, day_index):
+        date_string = self.ordered_date_price_tuples[month_index][0].strip()
+        day = day_index + 1
+        year = int(date_string.split(' ')[-1])
+        month_abbr = date_string.split(' ')[0]
+        month_number = list(calendar.month_abbr).index(month_abbr)
+        return datetime.date(year, month_number, day)
+
+    def _purchase(self):
+        """
+        Purchase the scheduled amount based on the day unless
+        we've exceeded max margin, in which case sell appropriately
+        :return: True if we can keep investing; False if we're bankrupt
+        """
+        if self.month_index == self.start_month_index and self.day_index == 0:
+            purchase_amount = self.seed_cash * self.initial_margin
+        elif self.month_index > self.start_month_index and self.day_index == self.monthly_deposit_day:
+            purchase_amount = self.monthly_cash * self.monthly_margin
+        else:
+            purchase_amount = 0.0
+        net_purchase_amount = min(purchase_amount, self._max_purchase_amount())
+        net_shares = net_purchase_amount / self.today_close_price
+        self.total_shares += net_shares
+        self.short += net_purchase_amount
+        if self.total_shares < 0:
+            self.short += (0 - self.total_shares) * self.today_close_price
+            self.total_shares = 0
+            return False
+        if net_purchase_amount != 0:
+            self.transaction_history.append({'date': self._todays_date(), 'product': 'SP',
+                                             'side': 'BUY' if net_purchase_amount > 0 else 'SELL',
+                                             'price': self.today_close_price, 'quantity': abs(net_shares)})
+        return True
+
+    def _pay_interest(self):
+        self.short *= (1 + self.daily_interest_rate)
+
+    def _exit_positions(self):
+        if self._is_last_day_of_trial() and self.total_shares > 0:
+            self.transaction_history.append({'date': self._todays_date(), 'product': 'SP',
+                 'side': 'SELL', 'price': self.today_close_price, 'quantity': self.total_shares})
+            self.short -= self.total_shares * self.today_close_price
+            self.total_shares = 0
+
+    def _pay_taxes(self):
+        if self._todays_date().month == 12 and self._todays_date().day == 31 or  self._is_last_day_of_trial():
+            result = calc_taxes.taxes_by_year(input_list=self.transaction_history)
+            if self._todays_date().year in result:
+                # withdraw taxes
+                self.short += result[self._todays_date()]['long_term'] * self.long_term_tax_rate + \
+                              result[self._todays_date().year]['short_term'] * self.short_term_tax_rate
+
+    def _is_last_day_of_trial(self):
+        return (self.month_index - self.start_month_index == self.duration_in_months and
+                self.day_index == calendar.monthrange(self._todays_date().year, self._todays_date().month)[-1] - 1)
+
+    def process_day(self):
+        """
+        :return: True if we can keep investing; False if we're bankrupt
+        """
+        self._deposit_money()
+        return_result = self._purchase()
+        self._pay_interest()
+        self._exit_positions()
+        self._pay_taxes()
+        return return_result
+
+    def simulate_trial(self):
+        bankrupt_indices = None
+        for self.month_index in range(self.start_month_index, self.duration_in_months + self.start_month_index):
+            if not bankrupt_indices:
+                for (self.day_index, self.today_close_price) in \
+                        enumerate(simulate_month(self.ordered_date_price_tuples, self.month_index, self.daily_percent_change_std)):
+                    if not self.process_day():
+                        bankrupt_indices = self.month_index, self.day_index
+                        break
+        if bankrupt_indices:
+            print "Went bankrupt after {} months and {} days".format(bankrupt_indices[0] - self.start_month_index,
+                                                                     bankrupt_indices[1])
+        print "Portfolio Value: {}".format(self.long() - self.short)
+        print "Total Invested: {}".format(self.deposited_money)
 
 
 def load_monthly_sp(adjust_for_inflation):
@@ -145,18 +272,27 @@ def load_monthly_sp(adjust_for_inflation):
     return data[-1:0:-1]
 
 
-if __name__ == '__main__':
-    x = load_monthly_sp(False)
-    sp_margin_profits_sim(
-        initial_cash=100,
-        initial_margin=1.,
-        max_margin=2.0,
-        yearly_interest_rate=0.0266,
-        period_in_months=1,
-        sims=1000,
-        monthly_cash=1,
-        monthly_margin=1.,
-        adjust_for_inflation=False
-    )
-    # print "\n"
-    # sp_margin_profits_sim(investment=50000, loan=0, interest_rate=0.0266, period_in_years=14, sims=100000, yearly_investment=24000, yearly_loan=0)
+def estimate_daily_std(ordered_date_price_tuples):
+    prices = [price_for_index(ordered_date_price_tuples, i) for i in range(len(ordered_date_price_tuples))]
+    percent_changes = [(price_for_index(ordered_date_price_tuples, i) - price_for_index(ordered_date_price_tuples, i-1)) / price_for_index(ordered_date_price_tuples, i-1)
+                       for i in range(1, len(prices))]
+    monthly_std = numpy.std(percent_changes)
+    return monthly_std / 30**(1.0/2.0) # https://www.investopedia.com/articles/04/021804.asp
+
+
+print simulate_month(load_monthly_sp(False), 146, estimate_daily_std(load_monthly_sp(False)))
+
+it = InvestmentTrial(
+    seed_cash=100000,
+    initial_margin=2.0,
+    annualized_interest_rate=0.0266,
+    duration_in_months=12*30,
+    monthly_cash=1000,
+    monthly_margin=2.0,
+    adjust_for_inflation=False,
+    max_allowed_margin=2.0,
+    long_term_tax_rate=0.2,
+    short_term_tax_rate=0.4
+)
+it.simulate_trial()
+
