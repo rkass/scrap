@@ -116,13 +116,72 @@ def simulate_month(ordered_date_price_tuples, index, percent_change_std):
 def price_for_index(ordered_date_price_tuples, index):
     return float(ordered_date_price_tuples[index][1].replace(',', ''))
 
-"""
-Each day
-    - Deposit money
-    - Buy Positions
-    - Sell Positions Due to Max Margin
-    - Pay Interest
-"""
+
+class InvestmentTrials(object):
+
+    def __init__(self, monte_carlo, num_trials, seed_cash, initial_margin, annualized_interest_rate,
+                 duration_in_months, monthly_cash, monthly_margin, max_allowed_margin,
+                 long_term_tax_rate, short_term_tax_rate):
+        self.monte_carlo = monte_carlo
+        self.num_trials = num_trials
+        self.seed_cash = seed_cash
+        self.initial_margin = initial_margin
+        self.annualized_interest_rate = annualized_interest_rate
+        self.duration_in_months = duration_in_months
+        self.monthly_cash = monthly_cash
+        self.monthly_margin = monthly_margin
+        self.daily_std = estimate_daily_std()
+        self.max_allowed_margin = max_allowed_margin
+        self.long_term_tax_rate = long_term_tax_rate
+        self.short_term_tax_rate = short_term_tax_rate
+        if self.monte_carlo and self.num_trials:
+            raise Exception('Either define monte carlo or num trials, not both. Set one to None')
+
+    def simulate_trials(self):
+        possible_starting_positions = len(ordered_date_price_tuples) - self.duration_in_months
+        if self.monte_carlo:
+            print "Simulating one trial at all {} possible starting positions".format(possible_starting_positions)
+            start_pos_gen = xrange(possible_starting_positions)
+        else:
+            print "Selecting randomly from {} possible starting positions to simulate {} trials"\
+                .format(possible_starting_positions, self.num_trials)
+            start_pos_gen = (random.randint(0, possible_starting_positions - 1) for _ in range(self.num_trials))
+        self.trials = [InvestmentTrial(self.seed_cash, self.initial_margin, self.annualized_interest_rate,
+                                       self.duration_in_months, self.monthly_cash, self.monthly_margin,
+                                    self.max_allowed_margin, self.long_term_tax_rate,
+                                       self.short_term_tax_rate, self.daily_std, fixed_start_index=i)
+                       for i in start_pos_gen]
+        print "Initialized {} trials".format(len(self.trials))
+        for i, t in enumerate(self.trials):
+            t.simulate_trial()
+            print "Finished simulating {} of {} trials".format(i + 1, len(self.trials))
+
+    def print_deciles(self):
+        values = [t.portfolio_value() for t in self.trials]
+        print "Portfolio Value Deciles with config: "
+        print "Seed cash={}".format(self.seed_cash)
+        print "Initial Margin Ratio={}".format(self.initial_margin)
+        print "Monthly cash={}".format(self.monthly_cash)
+        print "Monthly Margin Ratio={}".format(self.monthly_margin)
+        print "Annual Interest Rate={}".format(self.annualized_interest_rate)
+        print "Max allowed Margin={}".format(self.max_allowed_margin)
+        print "Duration in Months={}".format(self.duration_in_months)
+        print "Short term tax rate={}".format(self.short_term_tax_rate)
+        print "Long term tax rate={}".format(self.long_term_tax_rate)
+        if self.monte_carlo:
+            print "Used monte carlo strategy"
+        else:
+            print "Simulated {} random trials".format(self.num_trials)
+        print "10th percentile: {}".format(numpy.percentile(values, 10))
+        print "20th percentile: {}".format(numpy.percentile(values, 20))
+        print "30th percentile: {}".format(numpy.percentile(values, 30))
+        print "40th percentile: {}".format(numpy.percentile(values, 40))
+        print "50th percentile: {}".format(numpy.percentile(values, 50))
+        print "60th percentile: {}".format(numpy.percentile(values, 60))
+        print "70th percentile: {}".format(numpy.percentile(values, 70))
+        print "80th percentile: {}".format(numpy.percentile(values, 80))
+        print "90th percentile: {}".format(numpy.percentile(values, 90))
+
 
 class InvestmentTrial(object):
 
@@ -130,9 +189,8 @@ class InvestmentTrial(object):
     monthly_interest_pay_day = 27
 
     def __init__(self, seed_cash, initial_margin, annualized_interest_rate, duration_in_months,
-                 monthly_cash, monthly_margin, adjust_for_inflation, max_allowed_margin,
-                 long_term_tax_rate, short_term_tax_rate, fixed_start_index=None):
-        self.ordered_date_price_tuples = load_monthly_sp(adjust_for_inflation)
+                 monthly_cash, monthly_margin, max_allowed_margin,
+                 long_term_tax_rate, short_term_tax_rate, daily_std, fixed_start_index=None):
         self.daily_interest_rate = annualized_interest_rate / 365.0
         self.seed_cash = seed_cash
         self.initial_margin = initial_margin
@@ -140,7 +198,7 @@ class InvestmentTrial(object):
         self.monthly_cash = monthly_cash
         self.monthly_margin = monthly_margin
         self.start_month_index = fixed_start_index if fixed_start_index \
-            else random.randint(0, len(self.ordered_date_price_tuples) - duration_in_months)
+            else random.randint(0, len(ordered_date_price_tuples) - duration_in_months)
         self.yesterday_close_price = None
         self.today_close_price = None
         self.month_index = None
@@ -150,16 +208,12 @@ class InvestmentTrial(object):
         self.max_allowed_margin = max_allowed_margin
         self.transaction_history = []
         self.deposited_money = 0
-        self.daily_percent_change_std = estimate_daily_std(self.ordered_date_price_tuples)
+        self.daily_percent_change_std = daily_std
         self.long_term_tax_rate = long_term_tax_rate
         self.short_term_tax_rate = short_term_tax_rate
-        print "Beginning {} where price is {}".format(self._date_for_month_day(self.start_month_index, 0),
-                                                      price_for_index(self.ordered_date_price_tuples,
-                                                                      self.start_month_index))
-        print "Ending {} where price is {}".format(self._date_for_month_day(self.start_month_index +
-                                                                            self.duration_in_months, 0),
-                                                   price_for_index(self.ordered_date_price_tuples,
-                                                                   self.start_month_index + self.duration_in_months))
+
+    def portfolio_value(self):
+        return self.long() - self.short
 
     def long(self):
         return self.total_shares * self.today_close_price
@@ -183,7 +237,7 @@ class InvestmentTrial(object):
         return self._date_for_month_day(self.month_index, self.day_index)
 
     def _date_for_month_day(self, month_index, day_index):
-        date_string = self.ordered_date_price_tuples[month_index][0].strip()
+        date_string = ordered_date_price_tuples[month_index][0].strip()
         day = day_index + 1
         year = int(date_string.split(' ')[-1])
         month_abbr = date_string.split(' ')[0]
@@ -222,7 +276,8 @@ class InvestmentTrial(object):
     def _exit_positions(self):
         if self._is_last_day_of_trial() and self.total_shares > 0:
             self.transaction_history.append({'date': self._todays_date(), 'product': 'SP',
-                 'side': 'SELL', 'price': self.today_close_price, 'quantity': self.total_shares})
+                                            'side': 'SELL', 'price': self.today_close_price,
+                                             'quantity': self.total_shares})
             self.short -= self.total_shares * self.today_close_price
             self.total_shares = 0
 
@@ -231,7 +286,7 @@ class InvestmentTrial(object):
             result = calc_taxes.taxes_by_year(input_list=self.transaction_history)
             if self._todays_date().year in result:
                 # withdraw taxes
-                self.short += result[self._todays_date()]['long_term'] * self.long_term_tax_rate + \
+                self.short += result[self._todays_date().year]['long_term'] * self.long_term_tax_rate + \
                               result[self._todays_date().year]['short_term'] * self.short_term_tax_rate
 
     def _is_last_day_of_trial(self):
@@ -254,15 +309,15 @@ class InvestmentTrial(object):
         for self.month_index in range(self.start_month_index, self.duration_in_months + self.start_month_index):
             if not bankrupt_indices:
                 for (self.day_index, self.today_close_price) in \
-                        enumerate(simulate_month(self.ordered_date_price_tuples, self.month_index, self.daily_percent_change_std)):
+                        enumerate(simulate_month(ordered_date_price_tuples, self.month_index, self.daily_percent_change_std)):
                     if not self.process_day():
                         bankrupt_indices = self.month_index, self.day_index
                         break
         if bankrupt_indices:
             print "Went bankrupt after {} months and {} days".format(bankrupt_indices[0] - self.start_month_index,
                                                                      bankrupt_indices[1])
-        print "Portfolio Value: {}".format(self.long() - self.short)
-        print "Total Invested: {}".format(self.deposited_money)
+        # print "Portfolio Value: {}".format(self.long() - self.short)
+        # print "Total Invested: {}".format(self.deposited_money)
 
 
 def load_monthly_sp(adjust_for_inflation):
@@ -272,7 +327,7 @@ def load_monthly_sp(adjust_for_inflation):
     return data[-1:0:-1]
 
 
-def estimate_daily_std(ordered_date_price_tuples):
+def estimate_daily_std():
     prices = [price_for_index(ordered_date_price_tuples, i) for i in range(len(ordered_date_price_tuples))]
     percent_changes = [(price_for_index(ordered_date_price_tuples, i) - price_for_index(ordered_date_price_tuples, i-1)) / price_for_index(ordered_date_price_tuples, i-1)
                        for i in range(1, len(prices))]
@@ -280,19 +335,87 @@ def estimate_daily_std(ordered_date_price_tuples):
     return monthly_std / 30**(1.0/2.0) # https://www.investopedia.com/articles/04/021804.asp
 
 
-print simulate_month(load_monthly_sp(False), 146, estimate_daily_std(load_monthly_sp(False)))
+ordered_date_price_tuples = load_monthly_sp(adjust_for_inflation=False)
 
-it = InvestmentTrial(
+
+its = InvestmentTrials(
+    monte_carlo=True,
+    num_trials=None,
+    seed_cash=100000,
+    initial_margin=1.5,
+    annualized_interest_rate=0.0318,
+    duration_in_months=12*20,
+    monthly_cash=1500,
+    monthly_margin=1.5,
+    max_allowed_margin=2.0,
+    long_term_tax_rate=0.32,
+    short_term_tax_rate=0.15
+)
+its.simulate_trials()
+its.print_deciles()
+
+its = InvestmentTrials(
+    monte_carlo=True,
+    num_trials=None,
+    seed_cash=100000,
+    initial_margin=1.0,
+    annualized_interest_rate=0.0318,
+    duration_in_months=12*20,
+    monthly_cash=1500,
+    monthly_margin=1.0,
+    max_allowed_margin=2.0,
+    long_term_tax_rate=0.32,
+    short_term_tax_rate=0.15
+)
+its.simulate_trials()
+its.print_deciles()
+
+
+its = InvestmentTrials(
+    monte_carlo=True,
+    num_trials=None,
     seed_cash=100000,
     initial_margin=2.0,
-    annualized_interest_rate=0.0266,
-    duration_in_months=12*30,
-    monthly_cash=1000,
+    annualized_interest_rate=0.0318,
+    duration_in_months=12*20,
+    monthly_cash=1500,
     monthly_margin=2.0,
-    adjust_for_inflation=False,
     max_allowed_margin=2.0,
-    long_term_tax_rate=0.2,
-    short_term_tax_rate=0.4
+    long_term_tax_rate=0.32,
+    short_term_tax_rate=0.15
 )
-it.simulate_trial()
+its.simulate_trials()
+its.print_deciles()
 
+its = InvestmentTrials(
+    monte_carlo=True,
+    num_trials=None,
+    seed_cash=100000,
+    initial_margin=2.0,
+    annualized_interest_rate=0.0318,
+    duration_in_months=12*20,
+    monthly_cash=1500,
+    monthly_margin=1.5,
+    max_allowed_margin=2.0,
+    long_term_tax_rate=0.32,
+    short_term_tax_rate=0.15
+)
+its.simulate_trials()
+its.print_deciles()
+
+
+its = InvestmentTrials(
+    monte_carlo=True,
+    num_trials=None,
+    seed_cash=100000,
+    initial_margin=1.2,
+    annualized_interest_rate=0.0318,
+    duration_in_months=12*20,
+    monthly_cash=1500,
+    monthly_margin=1.2,
+    max_allowed_margin=2.0,
+    long_term_tax_rate=0.32,
+    short_term_tax_rate=0.15
+)
+its.simulate_trials()
+its.print_deciles()
