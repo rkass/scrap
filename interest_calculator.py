@@ -348,6 +348,22 @@ its = InvestmentTrials(
     monthly_cash=1500,
     monthly_margin=2.0,
     max_allowed_margin=2.0,
+    long_term_tax_rate=0.15,
+    short_term_tax_rate=0.32
+)
+its.simulate_trials()
+its.print_deciles()
+
+its = InvestmentTrials(
+    monte_carlo=True,
+    num_trials=None,
+    seed_cash=100000,
+    initial_margin=1.75,
+    annualized_interest_rate=0.0318,
+    duration_in_months=12*20,
+    monthly_cash=1500,
+    monthly_margin=1.75,
+    max_allowed_margin=2.0,
     long_term_tax_rate=0.32,
     short_term_tax_rate=0.15
 )
@@ -374,11 +390,11 @@ its = InvestmentTrials(
     monte_carlo=True,
     num_trials=None,
     seed_cash=100000,
-    initial_margin=1.2,
+    initial_margin=1.25,
     annualized_interest_rate=0.0318,
     duration_in_months=12*20,
     monthly_cash=1500,
-    monthly_margin=1.2,
+    monthly_margin=1.25,
     max_allowed_margin=2.0,
     long_term_tax_rate=0.32,
     short_term_tax_rate=0.15
