@@ -172,6 +172,7 @@ class InvestmentTrials(object):
             print "Used monte carlo strategy"
         else:
             print "Simulated {} random trials".format(self.num_trials)
+        print "MEAN: {}".format(numpy.mean(values))
         print "10th percentile: {}".format(numpy.percentile(values, 10))
         print "20th percentile: {}".format(numpy.percentile(values, 20))
         print "30th percentile: {}".format(numpy.percentile(values, 30))
@@ -337,6 +338,21 @@ def estimate_daily_std():
 
 ordered_date_price_tuples = load_monthly_sp(adjust_for_inflation=False)
 
+its = InvestmentTrials(
+    monte_carlo=True,
+    num_trials=None,
+    seed_cash=100000,
+    initial_margin=2.0,
+    annualized_interest_rate=0.0318,
+    duration_in_months=12*20,
+    monthly_cash=1500,
+    monthly_margin=2.0,
+    max_allowed_margin=2.0,
+    long_term_tax_rate=0.32,
+    short_term_tax_rate=0.15
+)
+its.simulate_trials()
+its.print_deciles()
 
 its = InvestmentTrials(
     monte_carlo=True,
@@ -347,6 +363,22 @@ its = InvestmentTrials(
     duration_in_months=12*20,
     monthly_cash=1500,
     monthly_margin=1.5,
+    max_allowed_margin=2.0,
+    long_term_tax_rate=0.32,
+    short_term_tax_rate=0.15
+)
+its.simulate_trials()
+its.print_deciles()
+
+its = InvestmentTrials(
+    monte_carlo=True,
+    num_trials=None,
+    seed_cash=100000,
+    initial_margin=1.2,
+    annualized_interest_rate=0.0318,
+    duration_in_months=12*20,
+    monthly_cash=1500,
+    monthly_margin=1.2,
     max_allowed_margin=2.0,
     long_term_tax_rate=0.32,
     short_term_tax_rate=0.15
@@ -370,23 +402,6 @@ its = InvestmentTrials(
 its.simulate_trials()
 its.print_deciles()
 
-
-its = InvestmentTrials(
-    monte_carlo=True,
-    num_trials=None,
-    seed_cash=100000,
-    initial_margin=2.0,
-    annualized_interest_rate=0.0318,
-    duration_in_months=12*20,
-    monthly_cash=1500,
-    monthly_margin=2.0,
-    max_allowed_margin=2.0,
-    long_term_tax_rate=0.32,
-    short_term_tax_rate=0.15
-)
-its.simulate_trials()
-its.print_deciles()
-
 its = InvestmentTrials(
     monte_carlo=True,
     num_trials=None,
@@ -396,23 +411,6 @@ its = InvestmentTrials(
     duration_in_months=12*20,
     monthly_cash=1500,
     monthly_margin=1.5,
-    max_allowed_margin=2.0,
-    long_term_tax_rate=0.32,
-    short_term_tax_rate=0.15
-)
-its.simulate_trials()
-its.print_deciles()
-
-
-its = InvestmentTrials(
-    monte_carlo=True,
-    num_trials=None,
-    seed_cash=100000,
-    initial_margin=1.2,
-    annualized_interest_rate=0.0318,
-    duration_in_months=12*20,
-    monthly_cash=1500,
-    monthly_margin=1.2,
     max_allowed_margin=2.0,
     long_term_tax_rate=0.32,
     short_term_tax_rate=0.15
