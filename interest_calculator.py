@@ -364,8 +364,8 @@ its = InvestmentTrials(
     monthly_cash=1500,
     monthly_margin=1.75,
     max_allowed_margin=2.0,
-    long_term_tax_rate=0.32,
-    short_term_tax_rate=0.15
+    long_term_tax_rate=0.15,
+    short_term_tax_rate=0.32
 )
 its.simulate_trials()
 its.print_deciles()
@@ -380,8 +380,8 @@ its = InvestmentTrials(
     monthly_cash=1500,
     monthly_margin=1.5,
     max_allowed_margin=2.0,
-    long_term_tax_rate=0.32,
-    short_term_tax_rate=0.15
+    long_term_tax_rate=0.15,
+    short_term_tax_rate=0.32
 )
 its.simulate_trials()
 its.print_deciles()
@@ -396,8 +396,8 @@ its = InvestmentTrials(
     monthly_cash=1500,
     monthly_margin=1.25,
     max_allowed_margin=2.0,
-    long_term_tax_rate=0.32,
-    short_term_tax_rate=0.15
+    long_term_tax_rate=0.15,
+    short_term_tax_rate=0.32
 )
 its.simulate_trials()
 its.print_deciles()
@@ -412,8 +412,8 @@ its = InvestmentTrials(
     monthly_cash=1500,
     monthly_margin=1.0,
     max_allowed_margin=2.0,
-    long_term_tax_rate=0.32,
-    short_term_tax_rate=0.15
+    long_term_tax_rate=0.15,
+    short_term_tax_rate=0.32
 )
 its.simulate_trials()
 its.print_deciles()
@@ -428,8 +428,8 @@ its = InvestmentTrials(
     monthly_cash=1500,
     monthly_margin=1.5,
     max_allowed_margin=2.0,
-    long_term_tax_rate=0.32,
-    short_term_tax_rate=0.15
+    long_term_tax_rate=0.15,
+    short_term_tax_rate=0.32
 )
 its.simulate_trials()
 its.print_deciles()
